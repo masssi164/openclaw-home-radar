@@ -1,0 +1,33 @@
+{
+  "name": "openclaw-home-radar",
+  "version": "0.1.0-alpha.1",
+  "description": "Question-driven household research tools for OpenClaw",
+  "type": "module",
+  "engines": {
+    "node": "^24.16.0 || >=26.1.0"
+  },
+  "files": [
+    "index.js",
+    "src/*.js",
+    "core/*.py",
+    "schemas/*.json",
+    "examples/*.json",
+    "docs/*.md",
+    "README.md",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "test": "node --test tests/*.test.js && python3 -m unittest discover -s tests -p \"test_*.py\""
+  },
+  "peerDependencies": {
+    "openclaw": "2026.9.4"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.js"
+    ],
+    "compat": {
+      "minGatewayVersion": "2026.9.4"
+    }
+  }
+}

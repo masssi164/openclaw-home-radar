@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "priorities": [
+    "Data sovereignty without sacrificing useful quality",
+    "Use existing equipment before buying",
+    "Reduce household effort and resource waste"
+  ],
+  "assets": [],
+  "needs": [],
+  "constraints": [],
+  "privacy": {
+    "allowed_research_context": [],
+    "publish_personal_context": false
+  },
+  "domains": [
+    "local-ai",
+    "assistants",
+    "speech",
+    "home-automation",
+    "energy",
+    "sustainability",
+    "robotics"
+  ]
+}

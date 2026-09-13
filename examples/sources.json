@@ -1,0 +1,14 @@
+{
+  "sources": [
+    {
+      "id": "example-news",
+      "kind": "rss",
+      "url": "https://example.org/feed.xml",
+      "role": "news_discovery",
+      "topics": [
+        "sustainability"
+      ],
+      "enabled": false
+    }
+  ]
+}

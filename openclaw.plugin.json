@@ -1,0 +1,49 @@
+{
+  "id": "home-radar",
+  "name": "Home Radar",
+  "description": "Private household context meets public-source research",
+  "version": "0.1.0-alpha.1",
+  "contracts": {
+    "tools": [
+      "radar_status",
+      "radar_collect",
+      "radar_prepare",
+      "radar_dossier"
+    ]
+  },
+  "toolMetadata": {
+    "radar_status": {
+      "optional": true
+    },
+    "radar_collect": {
+      "optional": true
+    },
+    "radar_prepare": {
+      "optional": true
+    },
+    "radar_dossier": {
+      "optional": true
+    }
+  },
+  "activation": {
+    "onStartup": false
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "dataRoot"
+    ],
+    "properties": {
+      "dataRoot": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Absolute private state directory outside plugin installation"
+      },
+      "pythonPath": {
+        "type": "string",
+        "default": "python3"
+      }
+    }
+  }
+}
