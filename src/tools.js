@@ -3,7 +3,7 @@ import { isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const script = fileURLToPath(new URL('../core/cli.py', import.meta.url));
-const commands = new Set(['status', 'collect', 'prepare', 'dossier']);
+const commands = new Set(['status', 'collect', 'prepare', 'dossier', 'newsroom']);
 
 export function invoke(config, command, params = {}) {
   if (!commands.has(command)) throw new Error('Unsupported command');
@@ -14,7 +14,7 @@ export function invoke(config, command, params = {}) {
     const child = spawn(config.pythonPath || 'python3', [script, '--root', config.dataRoot, command],
       { shell: false, stdio: ['pipe', 'pipe', 'pipe'] });
     let output = ''; let failure;
-    const timer = setTimeout(() => { failure = new Error('Radar operation timed out'); child.kill('SIGKILL'); }, 120000);
+    const timer = setTimeout(() => { failure = new Error('Radar operation timed out'); child.kill('SIGKILL'); }, 300000);
     child.stdout.on('data', chunk => {
       output += chunk.toString();
       if (Buffer.byteLength(output) > 4 * 1024 * 1024) { failure = new Error('Radar output too large'); child.kill('SIGKILL'); }
@@ -38,6 +38,7 @@ export function registerTools(api) {
     ['radar_status', 'status', 'Read local evidence collection and dossier health.', empty],
     ['radar_collect', 'collect', 'Fetch operator-configured public feeds into private SQLite; does not judge or publish news.', empty],
     ['radar_prepare', 'prepare', 'Prepare private household questions, dossiers and evidence for host-agent research. This alone does not perform the research.', { type: 'object', properties: { limit: { type: 'integer', minimum: 1, maximum: 50 } }, additionalProperties: false }],
+    ['radar_newsroom', 'newsroom', 'Resume a durable research run, page all evidence, record semantic assessments, checkpoint report and separate actual delivery receipts. No sends or model calls.', { type: 'object', properties: { action: { type: 'string', enum: ['start','list','status','batch','assess','finish','dispatch','receipt'] }, run_id: {type:'string'}, limit: {type:'integer',minimum:1,maximum:50}, items: {type:'array',items:{type:'object',additionalProperties:true}}, reason:{type:'string'}, report:{type:'string'}, material_key:{type:'string'}, channel:{type:'string',enum:['matrix','audio']}, status:{type:'string',enum:['delivered','failed','unknown','skipped']}, reference:{type:'string'} }, required:['action'], additionalProperties:false }],
     ['radar_dossier', 'dossier', 'List or persist research dossiers with explicit evidence provenance. Never grants permission to act.', { type: 'object', properties: { action: { type: 'string', enum: ['list', 'upsert'] }, document: { type: 'object', additionalProperties: true } }, required: ['action'], additionalProperties: false }],
   ];
   for (const [name, command, description, parameters] of specs) {

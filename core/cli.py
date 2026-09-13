@@ -7,6 +7,8 @@ import sqlite3
 import sys
 
 import evidence
+import newsroom
+from http_cache import CachedFetcher
 
 MAX_INPUT = 128 * 1024
 
@@ -55,9 +57,17 @@ def run(root, command, payload):
     try:
         db.execute('CREATE TABLE IF NOT EXISTS dossiers(id TEXT PRIMARY KEY, updated_at TEXT NOT NULL, payload TEXT NOT NULL)')
         if command == 'status':
-            return dict(evidence.status(db), dossier_count=db.execute('SELECT COUNT(*) FROM dossiers').fetchone()[0])
+            runs = newsroom.run(db, {}, {'action':'list'})
+            result = evidence.status(db)
+            triaged = db.execute('SELECT COUNT(*) FROM triage').fetchone()[0]
+            return dict(result, triaged=triaged, untriaged=result['items']-triaged,
+                        dossier_count=db.execute('SELECT COUNT(*) FROM dossiers').fetchone()[0], newsroom=runs)
         if command == 'collect':
-            return evidence.collect(db, evidence.load_sources(root))
+            sources = evidence.load_sources(root)
+            fetcher = CachedFetcher(db)
+            return fetcher.save(sources, evidence.collect(db, sources, fetcher))
+        if command == 'newsroom':
+            return newsroom.run(db, evidence.config(root, 'profile.json'), payload)
         if command == 'dossier':
             action = payload.get('action', 'list')
             if action == 'list':
@@ -94,7 +104,7 @@ def run(root, command, payload):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', required=True)
-    parser.add_argument('command', choices=['status', 'collect', 'prepare', 'dossier'])
+    parser.add_argument('command', choices=['status', 'collect', 'prepare', 'dossier', 'newsroom'])
     args = parser.parse_args()
     try:
         raw = sys.stdin.buffer.read(MAX_INPUT + 1)

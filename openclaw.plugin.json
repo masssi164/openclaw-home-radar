@@ -2,12 +2,13 @@
   "id": "home-radar",
   "name": "Home Radar",
   "description": "Private household context meets public-source research",
-  "version": "0.1.0-alpha.1",
+  "version": "0.2.0-alpha.1",
   "contracts": {
     "tools": [
       "radar_status",
       "radar_collect",
       "radar_prepare",
+      "radar_newsroom",
       "radar_dossier"
     ]
   },
@@ -22,6 +23,9 @@
       "optional": true
     },
     "radar_dossier": {
+      "optional": true
+    },
+    "radar_newsroom": {
       "optional": true
     }
   },

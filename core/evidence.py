@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
+from html.parser import HTMLParser
 import json
 import sqlite3
 import sys
@@ -80,6 +82,26 @@ def xml_text(element, name):
     return "" if node is None else "".join(node.itertext()).strip()
 
 
+class StableHTML(HTMLParser):
+    """Ignore layout identifiers, retain content, links and factual attribute values."""
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.parts=[]
+    def handle_starttag(self, tag, attrs):
+        kept=sorted((k,v) for k,v in attrs if k not in {'id','class','style','loading','decoding'})
+        self.parts.append(canonical([tag,kept]))
+    def handle_endtag(self, tag): self.parts.append('/'+tag)
+    def handle_data(self, data):
+        value=' '.join(data.split())
+        if value:self.parts.append(value)
+
+
+def stable_body(body):
+    if not re.search(r'<[a-zA-Z][^>]*>',body):return body
+    parser=StableHTML();parser.feed(body);parser.close()
+    return canonical(parser.parts)
+
+
 def parse_source(source, payload):
     """Normalize upstream evidence; do not classify relevance or trust feed prose."""
     kind = source["kind"]
@@ -137,6 +159,7 @@ def parse_source(source, payload):
         row["topics"] = source.get("topics", [])
         # Preserve an upstream revision as independent evidence when its substance changes.
         evidence = {k: v for k, v in row.items() if k != "topics"}
+        if kind == "rss": evidence["body"] = stable_body(row["body"])
         row["content_hash"] = hashlib.sha256(canonical(evidence).encode()).hexdigest()
         row["item_id"] = row["content_hash"]
         # Configuration provenance does not create new upstream evidence revisions.
@@ -154,10 +177,11 @@ def parse_source(source, payload):
 def connect(root):
     directory = Path(root) / "data"
     directory.mkdir(parents=True, exist_ok=True)
-    db = sqlite3.connect(directory / "radar.sqlite")
+    db = sqlite3.connect(directory / "radar.sqlite", timeout=30)
     db.row_factory = sqlite3.Row
     db.executescript("""
         PRAGMA foreign_keys=ON;
+        PRAGMA busy_timeout=30000;
         CREATE TABLE IF NOT EXISTS items (
             item_id TEXT PRIMARY KEY, content_hash TEXT NOT NULL, source_id TEXT NOT NULL,
             upstream_id TEXT NOT NULL, url TEXT NOT NULL, title TEXT NOT NULL, body TEXT NOT NULL,
@@ -167,6 +191,7 @@ def connect(root):
         CREATE TABLE IF NOT EXISTS source_health (
             source_id TEXT PRIMARY KEY, last_attempt_at TEXT NOT NULL, last_success_at TEXT,
             error TEXT, fetched INTEGER NOT NULL DEFAULT 0, added INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE IF NOT EXISTS evidence_aliases (content_hash TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(item_id));
         CREATE TABLE IF NOT EXISTS reviews (
             review_id INTEGER PRIMARY KEY AUTOINCREMENT, item_id TEXT NOT NULL REFERENCES items(item_id),
             reviewed_at TEXT NOT NULL, decision TEXT NOT NULL, payload TEXT NOT NULL);
@@ -204,6 +229,16 @@ def error_summary(error):
 
 
 def collect(db, sources, fetcher=fetch, workers=6):
+    # Preserve old IDs/reviews across the HTML fingerprint normalization upgrade.
+    # Each equivalent normalized revision points to existing evidence, not a new item.
+    with db:
+        for source in sources:
+            if source.get('kind') != 'rss': continue
+            for old in db.execute('SELECT * FROM items WHERE source_id=? ORDER BY retrieved_at DESC,item_id', (source['id'],)).fetchall():
+                substance={k:old[k] for k in ('upstream_id','title','url','body','published_at','source_id')}
+                substance['body']=stable_body(substance['body'])
+                digest=hashlib.sha256(canonical(substance).encode()).hexdigest()
+                db.execute('INSERT OR IGNORE INTO evidence_aliases VALUES (?,?)',(digest,old['item_id']))
     if not 1 <= workers <= 8:
         raise ValueError("Collector workers must be between 1 and 8")
     def prepare(source):
@@ -220,7 +255,10 @@ def collect(db, sources, fetcher=fetch, workers=6):
             domains = source.get("domains", topics)
             if not isinstance(domains, list) or not all(isinstance(x, str) for x in domains):
                 raise ValueError("Domains must be a list of strings")
-            rows = parse_source(source, fetcher(source["url"]))
+            payload = fetcher(source["url"])
+            if payload is None:
+                return source, attempted, None, None
+            rows = parse_source(source, payload)
             if not rows:
                 raise ValueError("Source returned no entries")
             return source, attempted, rows, None
@@ -236,13 +274,23 @@ def collect(db, sources, fetcher=fetch, workers=6):
         try:
             if failure is not None:
                 raise failure
+            if rows is None:
+                state = getattr(fetcher, 'states', {}).get(source['url'])
+                if state == 'not_modified':
+                    with db:
+                        db.execute('UPDATE source_health SET last_attempt_at=?,last_success_at=?,error=NULL,fetched=0,added=0 WHERE source_id=?', (attempted,attempted,source['id']))
+                results.append({'source_id':source['id'],'fetched':0,'added':0,'error':None})
+                continue
             added = 0
             with db:
                 for row in rows:
+                    alias=db.execute('SELECT item_id FROM evidence_aliases WHERE content_hash=?',(row['content_hash'],)).fetchone()
+                    if alias:row['item_id']=alias['item_id']
                     result = db.execute("""INSERT OR IGNORE INTO items VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""", (
                         row["item_id"], row["content_hash"], row["source_id"], row["upstream_id"], row["url"], row["title"], row["body"],
                         row["published_at"], attempted, attempted, canonical(row["topics"]), canonical(row.get("metadata", {}))))
                     added += result.rowcount
+                    db.execute("INSERT OR IGNORE INTO evidence_aliases VALUES (?,?)", (row["content_hash"],row["item_id"]))
                     db.execute("UPDATE items SET last_seen_at=?, topics=?, metadata=? WHERE item_id=?", (attempted, canonical(row["topics"]), canonical(row["metadata"]), row["item_id"]))
                 db.execute("""INSERT INTO source_health VALUES (?,?,?,?,?,?)
                     ON CONFLICT(source_id) DO UPDATE SET last_attempt_at=excluded.last_attempt_at,

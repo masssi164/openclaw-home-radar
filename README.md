@@ -1,18 +1,23 @@
 # Home Radar for OpenClaw
 
-**0.1.0-alpha.1 — working research tools, not a finished autonomous journalist.**
+**0.2.0-alpha.1 — working research tools, not a finished autonomous journalist.**
 
 Turn public developments into investigations of household needs, using private
 local context. The host OpenClaw agent does the reasoning and web research; this
 plugin supplies evidence collection, question-based dossiers and a research
 contract. It does not call a separate paid model API or run its own AI service.
 
+See the [implemented specification](docs/specification-v0.2.md) and
+[restart-safe host workflow](docs/newsroom-workflow.md).
+
 ## What works
 
 - Native OpenClaw plugin with optional `radar_status`, `radar_collect`,
-  `radar_prepare` and `radar_dossier` tools.
+  `radar_prepare`, `radar_newsroom` and `radar_dossier` tools.
 - RSS/Atom news feeds, GitHub releases and Hugging Face metadata collection.
 - SQLite evidence revision deduplication, source health and provenance.
+- Conditional HTTP collection, deferred backoff and per-host request serialization.
+- Durable full-coverage run snapshots, resumable triage and separate delivery receipts.
 - Persistent household research questions with evidence, unknowns and next searches.
 - Preparation of a bounded context bundle plus a question-driven research contract.
 - Separate private runtime data; no household data or delivery endpoints in this repository.
@@ -25,8 +30,8 @@ cloud database, mandatory graph database, frontend or additional daemon.
 
 Tested against **OpenClaw 2026.9.4**. The alpha pins that host peer version because
 the plugin API is evolving. Node follows the host's supported engines:
-24.16+ within 24.x, or 26.1+. SDK registration was checked against the installed
-host without installing the plugin into the live gateway.
+24.16+ within 24.x, or 26.1+. SDK registration is tested against the host; operator-specific live integration
+remains separate from the public package.
 
 ## Start locally
 

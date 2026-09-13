@@ -47,3 +47,29 @@ class CoreTests(unittest.TestCase):
             self.assertIsNotNone(result['sources'][0]['error'])
             self.assertEqual(evidence.status(db)['items'],0)
         finally: db.close()
+
+    def test_layout_ids_are_not_new_evidence_but_prices_are(self):
+        source={'id':'news','kind':'rss','url':'https://example.org/rss'}
+        feed=b'<rss><channel><item><guid>1</guid><title>Item</title><link>https://example.org/item</link><description><![CDATA[<div id="random-a" class="layout">Price 100 EUR</div>]]></description></item></channel></rss>'
+        a=evidence.parse_source(source,feed)[0]
+        b=evidence.parse_source(source,feed.replace(b'random-a',b'random-b'))[0]
+        c=evidence.parse_source(source,feed.replace(b'100 EUR',b'90 EUR'))[0]
+        self.assertEqual(a['item_id'],b['item_id'])
+        self.assertNotEqual(a['item_id'],c['item_id'])
+
+    def test_old_html_identity_migrates_without_retriage(self):
+        import hashlib
+        source={'id':'news','kind':'rss','url':'https://example.org/rss'}
+        feed=b'<rss><channel><item><guid>1</guid><title>T</title><link>https://example.org/story</link><description><![CDATA[<div id="a">Same</div>]]></description></item></channel></rss>'
+        db=evidence.connect(self.root)
+        try:
+            evidence.collect(db,[source],lambda _:feed)
+            # Original alpha identity differed from the normalized signature.
+            row=db.execute('SELECT * FROM items').fetchone()
+            with db:
+                db.execute('DELETE FROM evidence_aliases')
+                db.execute('UPDATE items SET item_id=?,content_hash=?',('legacy-id','legacy-id'))
+            result=evidence.collect(db,[source],lambda _:feed.replace(b'id="a"',b'id="b"'))
+            self.assertEqual(result['sources'][0]['added'],0)
+            self.assertEqual(db.execute('SELECT item_id FROM items').fetchone()[0],'legacy-id')
+        finally:db.close()
